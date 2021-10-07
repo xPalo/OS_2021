@@ -657,3 +657,18 @@ procdump(void)
     printf("\n");
   }
 }
+
+// Return the number of UNUSED processes
+uint64 nproc()
+{
+  uint64 cnt = 0;
+  struct proc *p;
+
+  for (p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if (p->state != UNUSED)
+      cnt++;
+    release(&p->lock);
+  }
+  return cnt;
+}
