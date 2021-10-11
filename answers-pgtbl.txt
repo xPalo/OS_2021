@@ -1,3 +1,10 @@
+1. ugetpid:
 Myslim si, ze tymto sposobom by sa mali dat urychlit v podstate vsetky systemove volania z uzivatelskeho priestoru, ktore nam poskytuju informacie z jadra ale pri tom nezasahuju do pamate.
 Preto je to bezpecne a daju sa zrychlit, kedze viem eliminovat prechody do jadra.
-Funkcie ako napr.: gets, statm, memcpy, memcmp atd. 
+Funkcie ako napr.: gets, stat, memcpy, memcmp atd.
+
+2. pte printout:
+Funkcia vmprint vypisuje obsah tabulky stranok. Jeden riadok predstavuje jedno PTE, nevynechavajuc vnorene zaznamy. Každý riadok PTE je odsadený v zavislosti od jeho hlbky v strome. V kazdom riadku sa nachadza index zaznamu, bity pte a FYZICKA ADRESA z PTE. Vieme si tak lepsie vizualizovat alokaciu pamate.
+
+Stranka 0 obsahuje programovy kod
+Stranka 2 je guard page
