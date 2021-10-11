@@ -80,7 +80,46 @@ sys_sleep(void)
 int
 sys_pgaccess(void)
 {
-  // lab pgtbl: your code here.
+  uint64 start;
+  int npages;
+  uint64 bitmask_user_address;
+  uint64 bitmask_kernel = 0;
+
+  if(argaddr(0, &start) < 0){
+    return -1;
+  }
+
+  if(argint(1, &npages) < 0){
+    return -1;
+  }
+
+  if(argaddr(2, &bitmask_user_address) < 0){
+    return -1;
+  }
+
+  // validity of arguments
+  if(npages > 12500){
+    return -1;
+  }
+
+  //add pta_a and number of system call
+
+  for(int i = 0; i < npages; i++){
+    pte_t *pte = walk(myproc()->pagetable, start, 0);
+    if(pte == 0){
+      return -1;
+    }
+    if(*pte & PTE_A){
+      bitmask_kernel |= 1 << i;
+      *pte &= ~PTE_A;
+    }
+    start += PGSIZE;
+  }
+
+  if(copyout(myproc()->pagetable, bitmask_user_address, (char *)&bitmask_kernel, (npages+7)/8) == -1){
+    return -1;
+  }
+
   return 0;
 }
 #endif
