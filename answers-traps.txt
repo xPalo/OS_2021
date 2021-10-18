@@ -1,0 +1,11 @@
+1. Podla manualu k instrukciam RISC-V na stranke MIT argumenty funkcii obsahuju registre x10 - x17, resp a0 - a7. Cislo 13 je ulozene v a2.
+
+2. Funkcia f() je v maine volana v tele prikazu printf ("printf("%d %d\n", f(8)+1, 13);") a funkcia g() je nasledne zavolana z funkcie f().
+
+3. printf() sa nachadza na adrese 0000000000000638.
+
+4. hodnota registra ra je 1544.
+
+5. Funkcia vypise "He110 World". Pre Big endian by musela premenna i nadobudnut hodnotu: "726C6400". Potrebne by bolo zmenit aj hodnotu "57616".
+
+6. Kompilator ocakava int hodnotu, ktoru by vypisal. Ta vsak nie je definovana a tak kompilator vezme nasledujucu hodnotu na stacku. 
