@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -297,28 +299,34 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 // physical memory.
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
+// clean write flag and setup cow flag
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+
+    if(*pte & PTE_W){
+      *pte ^= PTE_W;
+      *pte |= PTE_COW;
+    }
+
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
+    /* if((mem = kalloc()) == 0)
       goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    memmove(mem, (char*)pa, PGSIZE);*/
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
       goto err;
     }
+    inc_ref(pa);
   }
   return 0;
 
@@ -350,6 +358,20 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+
+    if(va0 >= MAXVA){
+      return -1;
+    }
+    pte_t *pte = walk(pagetable, va0, 0);
+    if(pte == 0){
+      return -1;
+    }
+    if(*pte & PTE_COW){
+      if(uvmcow(pagetable, va0)){
+        panic("copy on write panic");
+      }
+    }
+
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
@@ -431,4 +453,53 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+// the page is copied only if some process modifies the shared page
+int
+uvmcow(pagetable_t pagetable,uint64 addr)
+{
+  pte_t *pte;
+  uint64 pa;
+  uint flags;
+  char *mem;
+
+  if(addr >= myproc()->sz){
+    return -1;
+  }
+  addr = PGROUNDDOWN(addr);
+  if((pte = walk(pagetable, addr, 0)) == 0){
+    panic("uvmcow: pte should exist");
+  }
+  if((*pte & PTE_V) == 0){
+    panic("uvmcow: page not present");
+  }
+  if((*pte & PTE_COW) == 0){
+    printf("uvmcow: PTE_COW not set for 0x%p\n", addr);
+    return -2;
+  }
+  if((mem = kalloc()) == 0){
+   // panic("uvmcow: kalloc failed\n");
+    return -3;
+  }
+
+  pa = PTE2PA(*pte);
+  if(pa == 0){
+    return -1;
+  }
+  memmove(mem, (char *)pa, PGSIZE);
+
+  flags = PTE_FLAGS(*pte);
+  flags ^= PTE_W;
+  flags |= PTE_COW;
+
+  uvmunmap(pagetable, PGROUNDDOWN(addr), 1, 1);
+  if(mappages(pagetable, PGROUNDDOWN(addr), PGSIZE, (uint64)mem, flags) != 0){
+    printf("uvm: fail mappages");	  
+    kfree(mem);
+    return -1;
+  }
+
+  return 0;
+
 }
