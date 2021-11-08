@@ -1,0 +1,1 @@
+Vlákno jadra dokáže komunikovať iba s jedným vláknom užívateľského programu. Preto môže nastať situácia, že tok riadenia je akoby "upchatý", pretože čaká na vykonanie systémového volania ako napríklad sys_read() - čítanie z klávesnice. 
