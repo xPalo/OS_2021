@@ -5,6 +5,11 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
+#include "fcntl.h"
+#include "sleeplock.h"
+#include "file.h"
 
 /*
  * the kernel's page table.
@@ -430,5 +435,67 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
+  }
+}
+
+int
+mmap_handler(uint64 va, int scause)
+{
+  struct proc *p = myproc();
+  struct vma* v = p->vma;
+  while(v != 0){
+    if(va >= v->start && va < v->end){
+      break;
+    }
+    v = v->next;
+  }
+
+  if(v == 0) return -1; // not mmap addr
+  if(scause == 13 && !(v->permission & PTE_R)) return -2; // unable to read vma
+  if(scause == 15 && !(v->permission & PTE_W)) return -3; // unable to write to vma
+
+  // load page from file
+  va = PGROUNDDOWN(va);
+  char* mem = kalloc();
+  if (mem == 0) return -4; // kalloc failed
+
+  memset(mem, 0, PGSIZE);
+
+  if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, v->permission) != 0){
+    kfree(mem);
+    return -5; // map page failed
+  }
+
+  struct file *f = v->file;
+  ilock(f->ip);
+  readi(f->ip, 0, (uint64)mem, v->off + va - v->start, PGSIZE);
+  iunlock(f->ip);
+  return 0;
+}
+
+void
+writeback(struct vma* v, uint64 addr, int n)
+{
+  if(!(v->permission & PTE_W) || (v->flags & MAP_PRIVATE)) // no need to writeback
+    return;
+
+  if((addr % PGSIZE) != 0)
+    panic("unmap: not aligned");
+
+  struct file* f = v->file;
+
+  int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
+  int i = 0;
+  while(i < n){
+    int n1 = n - i;
+    if(n1 > max)
+      n1 = max;
+
+    begin_op();
+    ilock(f->ip);
+    int r = writei(f->ip, 1, addr + i, v->off + v->start - addr + i, n1);
+    iunlock(f->ip);
+    end_op();
+    i += r;
   }
 }
